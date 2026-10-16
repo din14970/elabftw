@@ -536,12 +536,16 @@ export class Metadata {
         if (!subFieldName) continue;
 
         const value = this.getInputValue(input);
-        if (value !== null) {
+        // Sparse storage: only include non-empty values
+        if (value !== null && value !== '') {
           rowValue[subFieldName] = value;
         }
       }
 
-      values.push(rowValue);
+      // Only push row if it has at least one non-empty value
+      if (Object.keys(rowValue).length > 0) {
+        values.push(rowValue);
+      }
     }
 
     return this.updateMetadataField(fieldName, values);
@@ -896,7 +900,7 @@ export class Metadata {
       subFieldNames.forEach(subFieldName => {
         const subField = subFields[subFieldName];
         const cell = document.createElement('td');
-        const subFieldValue = rowValue[subFieldName];
+        const subFieldValue = rowValue[subFieldName] ?? '';
         const subFieldProps: ExtraFieldProperties = {
           type: subField.type,
           value: subFieldValue,

@@ -30,19 +30,169 @@ function createButton(action: string, btnType: string, content?: string): HTMLBu
   return btn;
 }
 
+function clearMultiFieldForm() {
+  const multifieldContainer = document.getElementById('newMultifieldSubFieldsContainer');
+  if (multifieldContainer) {
+    multifieldContainer.innerHTML = '';
+  }
+}
+
 function clearForm() {
   // remove all extra inputs (dropdown and radio)
   const form = (document.getElementById('newFieldForm') as HTMLFormElement);
   form.querySelectorAll('.is-extra-input').forEach(i => i.parentElement.remove());
+  clearMultiFieldForm();
   form.reset();
 }
 
 function toggleContentDiv(key: string) {
-  const keys = ['text', 'classic', 'selectradio', 'checkbox', 'number'];
+  const keys = ['text', 'classic', 'selectradio', 'checkbox', 'number', 'multifield'];
   document.getElementById('newFieldContentDiv_' + key).toggleAttribute('hidden', false);
   // remove the shown one from the list and hide all others
   keys.filter(k => k !== key).forEach(k => {
     document.getElementById('newFieldContentDiv_' + k).toggleAttribute('hidden', true);
+    // Clear multifield container when hiding it
+    if (k === 'multifield') {
+      clearMultiFieldForm()
+    }
+  });
+}
+
+function addMultifieldSubFieldRow(name = '', type = 'text', options?: string[], defaultValue = '', description = ''): void {
+  const container = document.getElementById('newMultifieldSubFieldsContainer');
+  if (!container) return;
+
+  const row = document.createElement('div');
+  row.className = 'multifield-subfield-row mb-2';
+  row.dataset.subFieldName = name;
+
+  const inputGroup = document.createElement('div');
+  inputGroup.className = 'input-group';
+
+  // Name input
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-control multifield-subfield-name';
+  nameInput.placeholder = i18next.t('Sub-field name');
+  nameInput.value = name;
+  inputGroup.appendChild(nameInput);
+
+  // Type select
+  const typeSelect = document.createElement('select');
+  typeSelect.className = 'form-control multifield-subfield-type';
+  [
+    { value: 'text', label: 'Text' },
+    { value: 'number', label: 'Number' },
+    { value: 'date', label: 'Date' },
+    { value: 'time', label: 'Time' },
+    { value: 'email', label: 'Email' },
+    { value: 'url', label: 'URL' },
+    { value: 'select', label: 'Dropdown' },
+    { value: 'checkbox', label: 'Checkbox' },
+    { value: 'items', label: 'Resource' },
+    { value: 'experiments', label: 'Experiment' },
+    { value: 'users', label: 'User' },
+    { value: 'compounds', label: 'Compound' },
+  ].forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = i18next.t(opt.label);
+    typeSelect.appendChild(option);
+  });
+  typeSelect.value = type;
+  inputGroup.appendChild(typeSelect);
+
+  // Default value input
+  const defaultInput = document.createElement('input');
+  defaultInput.type = 'text';
+  defaultInput.className = 'form-control multifield-subfield-default';
+  defaultInput.placeholder = i18next.t('Default value') + '...';
+  defaultInput.value = defaultValue;
+  inputGroup.appendChild(defaultInput);
+
+  // Description input (for tooltip)
+  const descInput = document.createElement('input');
+  descInput.type = 'text';
+  descInput.className = 'form-control multifield-subfield-description';
+  descInput.placeholder = i18next.t('Description') + '...';
+  descInput.value = description;
+  inputGroup.appendChild(descInput);
+
+  // Remove button
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn btn-secondary btn-sm multifield-remove-subfield';
+  removeBtn.innerHTML = '<i class="fas fa-minus"></i>';
+  const removeBtnWrapper = document.createElement('div');
+  removeBtnWrapper.className = 'input-group-append';
+  removeBtnWrapper.appendChild(removeBtn);
+  inputGroup.appendChild(removeBtnWrapper);
+
+  row.appendChild(inputGroup);
+
+  // Choices container (for select type) - reusing the existing pattern
+  const choicesDiv = document.createElement('div');
+  choicesDiv.className = 'multifield-subfield-options mt-1';
+  choicesDiv.hidden = type !== 'select';
+
+  const choicesLabel = document.createElement('label');
+  choicesLabel.className = 'smallgray';
+  choicesLabel.textContent = i18next.t('Choices');
+  choicesDiv.appendChild(choicesLabel);
+
+  const choicesContainer = document.createElement('div');
+  choicesContainer.className = 'multifield-subfield-choices-container';
+  choicesDiv.appendChild(choicesContainer);
+
+  // Add initial choice inputs
+  const choiceInputs = [];
+  if (options && options.length > 0) {
+    options.forEach(opt => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-control mb-1 multifield-subfield-choice-input';
+      input.value = opt;
+      input.dataset.purpose = 'choice';
+      choicesContainer.appendChild(input);
+      choiceInputs.push(input);
+    });
+  } else {
+    // Add two default inputs
+    for (let i = 0; i < 2; i++) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-control mb-1 multifield-subfield-choice-input';
+      input.dataset.purpose = 'choice';
+      choicesContainer.appendChild(input);
+    }
+  }
+
+  // Add choice button
+  const addChoiceBtn = document.createElement('button');
+  addChoiceBtn.type = 'button';
+  addChoiceBtn.className = 'btn btn-secondary btn-sm multifield-add-choice';
+  addChoiceBtn.textContent = i18next.t('Add another choice');
+  addChoiceBtn.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control mb-1 multifield-subfield-choice-input';
+    input.dataset.purpose = 'choice';
+    choicesContainer.appendChild(input);
+    input.focus();
+  });
+  choicesDiv.appendChild(addChoiceBtn);
+
+  row.appendChild(choicesDiv);
+  container.appendChild(row);
+
+  // Toggle options visibility when type changes
+  typeSelect.addEventListener('change', () => {
+    choicesDiv.hidden = typeSelect.value !== 'select';
+  });
+
+  // Handle remove button
+  removeBtn.addEventListener('click', () => {
+    row.remove();
   });
 }
 
@@ -144,6 +294,27 @@ if (document.getElementById('metadataDiv') && entity.id) {
           const checkboxSelect = document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement;
           const fieldValue = Array.isArray(fieldData.value) ? fieldData.value[0] ?? '' : fieldData.value;
           checkboxSelect.value = fieldValue === 'on' ? 'checked' : 'unchecked';
+        } else if (fieldType === ExtraFieldInputType.Multifield) {
+          toggleContentDiv('multifield');
+          // Populate sub-fields
+          const subFieldsContainer = document.getElementById('newMultifieldSubFieldsContainer');
+          subFieldsContainer.innerHTML = '';
+
+          if (fieldData.sub_fields && Array.isArray(fieldData.sub_fields)) {
+            fieldData.sub_fields.forEach((subField) => {
+              addMultifieldSubFieldRow(
+                subField.name || '',
+                subField.type || 'text',
+                subField.options,
+                subField.default || '',
+                subField.description || ''
+              );
+            });
+          }
+          // Add at least one empty row if no sub-fields
+          if (!fieldData.sub_fields || fieldData.sub_fields.length === 0) {
+            addMultifieldSubFieldRow('', 'text');
+          }
         } else {
           // Default handling for simple text-based inputs
           const fieldValueTextArea = document.getElementById('newFieldValueTextArea') as HTMLTextAreaElement;
@@ -188,6 +359,30 @@ if (document.getElementById('metadataDiv') && entity.id) {
       clearForm();
     });
 
+    // When modal is shown, initialize the form based on current type
+    $('#fieldBuilderModal').on('shown.bs.modal', () => {
+      const fieldTypeSelect = document.getElementById('newFieldTypeSelect') as HTMLSelectElement;
+      const fieldType = fieldTypeSelect.value as ExtraFieldInputType;
+
+      // Clear any leftover state
+      clearForm();
+
+      // For multifield, default to allow multiple values
+      if (fieldType === 'multifield') {
+        (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked = true;
+      }
+
+      // Trigger content div toggle based on current type
+      if (fieldType === 'multifield') {
+        toggleContentDiv('multifield');
+        // Ensure there's at least one sub-field row
+        const container = document.getElementById('newMultifieldSubFieldsContainer');
+        if (container && container.children.length === 0) {
+          addMultifieldSubFieldRow();
+        }
+      }
+    });
+
     addAutocompleteToExtraFieldsKeyInputs();
 
     // when the type is selected, the default value input's type is changed to match
@@ -218,6 +413,14 @@ if (document.getElementById('metadataDiv') && entity.id) {
       case ExtraFieldInputType.Number:
       case ExtraFieldInputType.Text:
         toggleContentDiv(fieldType);
+        break;
+      case ExtraFieldInputType.Multifield:
+        toggleContentDiv('multifield');
+        // Initialize with one empty sub-field row
+        const container = document.getElementById('newMultifieldSubFieldsContainer');
+        if (container && container.children.length === 0) {
+          addMultifieldSubFieldRow();
+        }
         break;
       default:
         break;
@@ -286,7 +489,58 @@ if (document.getElementById('metadataDiv') && entity.id) {
           const field = {};
           field['type'] = (document.getElementById('newFieldTypeSelect') as HTMLSelectElement).value;
           let fieldValue = '';
-          if (field['type'] === ExtraFieldInputType.Text) {
+          // Read allowMultiValues early as it's used in multiple places
+          const allowMultiValues = (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked;
+
+          if (field['type'] === 'multifield') {
+            // Handle multifield: collect sub-fields configuration
+            field['sub_fields'] = [];
+            const subFieldRows = document.querySelectorAll('.multifield-subfield-row');
+            subFieldRows.forEach(row => {
+              const nameInput = row.querySelector('.multifield-subfield-name') as HTMLInputElement;
+              const typeSelect = row.querySelector('.multifield-subfield-type') as HTMLSelectElement;
+              const defaultInput = row.querySelector('.multifield-subfield-default') as HTMLInputElement;
+              const descInput = row.querySelector('.multifield-subfield-description') as HTMLInputElement;
+
+              if (nameInput.value.trim()) {
+                const subField: Record<string, unknown> = {
+                  name: nameInput.value.trim(),
+                  type: typeSelect.value as ExtraFieldInputType,
+                };
+
+                // Add default value if provided
+                if (defaultInput.value.trim()) {
+                  subField.default = defaultInput.value.trim();
+                }
+
+                // Add description if provided
+                if (descInput.value.trim()) {
+                  subField.description = descInput.value.trim();
+                }
+
+                // Add options if type is select
+                if (typeSelect.value === 'select') {
+                  const choiceInputs = row.querySelectorAll('.multifield-subfield-choice-input');
+                  const choices: string[] = [];
+                  choiceInputs.forEach(input => {
+                    const val = (input as HTMLInputElement).value.trim();
+                    if (val) choices.push(val);
+                  });
+                  if (choices.length > 0) {
+                    subField.options = choices;
+                  }
+                }
+                field['sub_fields'].push(subField);
+              }
+            });
+            // Validate that at least one sub-field has a name
+            if (field['sub_fields'].length === 0) {
+              notify.error('multifield-needs-subfields');
+              return;
+            }
+            // Initialize with one empty row
+            field['value'] = [{}];
+          } else if (field['type'] === 'text') {
             fieldValue = textAreaField.value.trim();
           } else if (['date', 'datetime-local', 'email', 'time', 'url', 'experiments', 'items', 'users', 'compounds'].includes(field['type'])) {
             fieldValue = (document.getElementById('newFieldValueInput') as HTMLInputElement).value.trim();
@@ -310,12 +564,14 @@ if (document.getElementById('metadataDiv') && entity.id) {
             if (field['units'].length > 0) {
               field['unit'] = field['units'][0];
             }
-
           } else if (field['type'] === ExtraFieldInputType.Checkbox) {
             fieldValue = (document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement).value === 'checked' ? 'on' : '';
           }
-          const allowMultiValues = (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked;
-          field['value'] = allowMultiValues ? [fieldValue || ''] : (fieldValue || '');
+
+          // Set value for non-multifield types
+          if (field['type'] !== ExtraFieldInputType.Multifield) {
+            field['value'] = allowMultiValues ? [fieldValue || ''] : (fieldValue || '');
+          }
           // get the description
           if ((document.getElementById('newFieldDescriptionInput') as HTMLInputElement).value) {
             field['description'] = (document.getElementById('newFieldDescriptionInput') as HTMLInputElement).value.trim();
@@ -327,9 +583,8 @@ if (document.getElementById('metadataDiv') && entity.id) {
           if ((document.getElementById('requiredSwitch') as HTMLInputElement).checked) {
             field['required'] = true;
           }
-          if (allowMultiValues) {
-            field['allow_multi_values'] = true;
-          }
+          // Always set allow_multi_values for multifield to control row behavior
+          field['allow_multi_values'] = allowMultiValues;
           if (grpSel.value !== '-1') {
             field['group_id'] = parseInt(grpSel.value);
           }
@@ -420,37 +675,96 @@ if (document.getElementById('metadataDiv') && entity.id) {
               : (field['units'].includes(prevUnit) ? prevUnit : field['units'][0]);
           } else if (field['type'] === ExtraFieldInputType.Checkbox) {
             field['value'] = (document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement).value === 'checked' ? 'on' : '';
-          }
-          // deal with modal SWITCHES (key: id, value: field's 'value')
-          const switches: Record<string, string> = {
-            blankValueOnDuplicateSwitch: 'blank_value_on_duplicate',
-            requiredSwitch: 'required',
-            newFieldAllowMultiSelect: 'allow_multi_values',
-          };
-          for (const [id, key] of Object.entries(switches)) {
-            const el = document.getElementById(id) as HTMLInputElement | null;
-            if (el?.checked) field[key] = true;
-          }
+          } else if (field['type'] === ExtraFieldInputType.Multifield) {
+            // Handle multifield: collect sub-fields configuration
+            field['sub_fields'] = [];
+            const subFieldRows = document.querySelectorAll('.multifield-subfield-row');
+            subFieldRows.forEach(row => {
+              const nameInput = row.querySelector('.multifield-subfield-name') as HTMLInputElement;
+              const typeSelect = row.querySelector('.multifield-subfield-type') as HTMLSelectElement;
+              const defaultInput = row.querySelector('.multifield-subfield-default') as HTMLInputElement;
+              const descInput = row.querySelector('.multifield-subfield-description') as HTMLInputElement;
 
-          const allowMultiValues = (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked;
-          const firstValue = Array.isArray(field['value']) ? field['value'][0] ?? '' : (field['value'] ?? '');
-          if (allowMultiValues) {
-            if (Array.isArray(prevField?.value) && (prevField.type ?? ExtraFieldInputType.Text) === field['type']) {
-              let values = [...prevField.value];
-              if (values.length === 0) {
-                values.push(firstValue);
-              } else {
-                values[0] = firstValue;
+              if (nameInput.value.trim()) {
+                const subField: Record<string, unknown> = {
+                  name: nameInput.value.trim(),
+                  type: typeSelect.value as ExtraFieldInputType,
+                };
+
+                // Add default value if provided
+                if (defaultInput.value.trim()) {
+                  subField.default = defaultInput.value.trim();
+                }
+
+                // Add description if provided
+                if (descInput.value.trim()) {
+                  subField.description = descInput.value.trim();
+                }
+
+                // Add options if type is select
+                if (typeSelect.value === 'select') {
+                  const choiceInputs = row.querySelectorAll('.multifield-subfield-choice-input');
+                  const choices: string[] = [];
+                  choiceInputs.forEach(input => {
+                    const val = (input as HTMLInputElement).value.trim();
+                    if (val) choices.push(val);
+                  });
+                  if (choices.length > 0) {
+                    subField.options = choices;
+                  }
+                }
+                field['sub_fields'].push(subField);
               }
-              if ([ExtraFieldInputType.Select, ExtraFieldInputType.Radio].includes(field['type'])) {
-                values = values.filter(value => field['options'].includes(String(value)));
-              }
-              field['value'] = values;
-            } else {
-              field['value'] = [firstValue];
+            });
+            // Validate that at least one sub-field has a name
+            if (field['sub_fields'].length === 0) {
+              notify.error('multifield-needs-subfields');
+              return;
             }
-          } else if (Array.isArray(field['value'])) {
-            field['value'] = firstValue;
+            // Preserve the existing value structure
+            field['value'] = prevField?.value || [{}];
+            // deal with modal SWITCHES (key: id, value: field's 'value')
+            const switches: Record<string, string> = {
+              blankValueOnDuplicateSwitch: 'blank_value_on_duplicate',
+              requiredSwitch: 'required',
+              newFieldAllowMultiSelect: 'allow_multi_values',
+            };
+            for (const [id, key] of Object.entries(switches)) {
+              const el = document.getElementById(id) as HTMLInputElement | null;
+              if (el?.checked) field[key] = true;
+            }
+          } else {
+            // deal with modal SWITCHES (key: id, value: field's 'value')
+            const switches: Record<string, string> = {
+              blankValueOnDuplicateSwitch: 'blank_value_on_duplicate',
+              requiredSwitch: 'required',
+              newFieldAllowMultiSelect: 'allow_multi_values',
+            };
+            for (const [id, key] of Object.entries(switches)) {
+              const el = document.getElementById(id) as HTMLInputElement | null;
+              if (el?.checked) field[key] = true;
+            }
+
+            const allowMultiValues = (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked;
+            const firstValue = Array.isArray(field['value']) ? field['value'][0] ?? '' : (field['value'] ?? '');
+            if (allowMultiValues) {
+              if (Array.isArray(prevField?.value) && (prevField.type ?? 'text') === field['type']) {
+                let values = [...prevField.value];
+                if (values.length === 0) {
+                  values.push(firstValue);
+                } else {
+                  values[0] = firstValue;
+                }
+                if (['select', 'radio'].includes(field['type'])) {
+                  values = values.filter(value => field['options'].includes(String(value)));
+                }
+                field['value'] = values;
+              } else {
+                field['value'] = [firstValue];
+              }
+            } else if (Array.isArray(field['value'])) {
+              field['value'] = firstValue;
+            }
           }
 
           // preserve properties that aren't editable in this modal
@@ -612,6 +926,11 @@ if (document.getElementById('metadataDiv') && entity.id) {
           MetadataC.update(metadata as ValidMetadata);
         });
       }
+    });
+
+    // Add sub-field button handler for multifield
+    document.getElementById('multifieldAddSubFieldBtn')?.addEventListener('click', () => {
+      addMultifieldSubFieldRow();
     });
   }
 }

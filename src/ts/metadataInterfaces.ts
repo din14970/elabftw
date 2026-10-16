@@ -15,6 +15,10 @@ export interface ExtraField {
   [key: string]: ExtraFieldProperties,
 }
 
+export interface SubField {
+  [key: string]: SubFieldProperties,
+}
+
 export enum ExtraFieldInputType {
   Checkbox = 'checkbox',
   Compounds = 'compounds',
@@ -22,6 +26,7 @@ export enum ExtraFieldInputType {
   DateTime = 'datetime-local',
   Email = 'email',
   Experiments = 'experiments',
+  Multifield = 'multifield',
   Number = 'number',
   Radio = 'radio',
   Items = 'items',
@@ -33,9 +38,17 @@ export enum ExtraFieldInputType {
   Url = 'url',
 }
 
+export interface SubFieldProperties {
+  type?: ExtraFieldInputType;
+  position?: number;
+  options?: string[];
+  description?: string;
+  default?: string|number;
+}
+
 export interface ExtraFieldProperties {
   type?: ExtraFieldInputType;
-  value: string|number|Array<string|number>;
+  value: string|number|Array<string|number>|Array<Map<string, string|number>>;  // Map more appropriate than Record
   group_id?: number;
   position?: number;
   options?: string[];
@@ -47,6 +60,7 @@ export interface ExtraFieldProperties {
   units?: string[];
   readonly?: boolean;
   element?: HTMLElement;
+  sub_fields?: SubField;
 }
 
 export interface MetadataElabftw {

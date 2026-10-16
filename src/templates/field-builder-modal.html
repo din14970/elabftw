@@ -66,6 +66,7 @@
             <option value='items'>{{ 'Resource'|trans }}</option>
             <option value='users'>{{ 'User'|trans }}</option>
             <option value='compounds'>{{ 'Compound'|trans }}</option>
+            <option value='multifield'>{{ 'Multifield'|trans }}</option>
             <option value='url'>URL</option>
           </select>
 
@@ -118,6 +119,13 @@
               <option value='unchecked'>{{ 'Unchecked'|trans }}</option>
               <option value='checked'>{{ 'Checked'|trans }}</option>
             </select>
+          </div>
+
+          {# MULTIFIELD #}
+          <div id='newFieldContentDiv_multifield' hidden>
+            <label id='newMultifieldSubfieldsDivLabel'>{{ 'Sub-fields'|trans }}</label>
+            <div id='newMultifieldSubFieldsContainer'></div>
+            <button type='button' class='btn btn-secondary btn-sm mt-1' id='multifieldAddSubFieldBtn'>{{ 'Add sub-field'|trans }}</button>
           </div>
 
           <div class='separator'></div>

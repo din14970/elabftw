@@ -164,7 +164,7 @@ export class Metadata {
     return values;
   }
 
-  updateMetadataField(fieldName: string, value: string|number|Array<string|number>|Array<Map<string, string|number>>): Promise<Response> {
+  updateMetadataField(fieldName: string, value: string|number|Array<string|number>|Array<Record<string, string|number>>): Promise<Response> {
     const params: Record<string, unknown> = {action: Action.UpdateMetadataField};
     params[fieldName] = value;
     return ApiC.patch(`${this.entity.type}/${this.entity.id}`, params).then(response => {
@@ -313,10 +313,17 @@ export class Metadata {
     holder.dataset.field = name;
     holder.id = this.getRandomId();
 
-    const subFields = properties.sub_fields || [];
+    // sub_fields is now an object/map keyed by field name
+    const subFields = properties.sub_fields || {};
+    // Sort sub-field names by position
+    const subFieldNames = Object.keys(subFields).sort((a, b) => {
+      const posA = subFields[a]?.position ?? 0;
+      const posB = subFields[b]?.position ?? 0;
+      return posA - posB;
+    });
 
     // If no sub-fields defined, show a warning
-    if (subFields.length === 0) {
+    if (subFieldNames.length === 0) {
       const warning = document.createElement('div');
       warning.classList.add('alert', 'alert-warning');
       warning.textContent = i18next.t('multifield-no-subfields') || 'No sub-fields defined. Edit the field to add sub-fields.';
@@ -327,12 +334,20 @@ export class Metadata {
     // Determine if multiple rows are allowed
     const allowMultiple = properties.allow_multi_values !== false;
 
-    // Ensure value is an array of objects
+    // Ensure value is an array of objects (Maps)
     const rawValues = Array.isArray(properties.value) ? properties.value : [];
+    // Convert Maps to Records for easier handling, or use as-is
     let values: Array<Record<string, string|number>> = [];
 
     for (const v of rawValues) {
-      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      if (v instanceof Map) {
+        // Convert Map to Record
+        const obj: Record<string, string|number> = {};
+        v.forEach((value, key) => {
+          obj[key] = value;
+        });
+        values.push(obj);
+      } else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
         values.push(v as Record<string, string|number>);
       }
     }
@@ -345,8 +360,9 @@ export class Metadata {
     if (values.length === 0) {
       // Initialize with one row with default values from sub-fields
       const emptyRowValue: Record<string, string|number> = {};
-      subFields.forEach(subField => {
-        emptyRowValue[subField.name] = subField.default !== undefined ? subField.default : '';
+      subFieldNames.forEach(subFieldName => {
+        const defaultVal = subFields[subFieldName].default;
+        emptyRowValue[subFieldName] = defaultVal !== undefined ? defaultVal : '';
       });
       values.push(emptyRowValue);
     }
@@ -364,15 +380,16 @@ export class Metadata {
     headerRow.append(controlHeader);
 
     // Create headers for each sub-field
-    for (const subField of subFields) {
+    subFieldNames.forEach(subFieldName => {
+      const subField = subFields[subFieldName];
       const th = document.createElement('th');
-      th.textContent = subField.name;
+      th.textContent = subFieldName;
       // Add tooltip for sub-field description
       if (subField.description) {
         th.setAttribute('title', subField.description);
       }
       headerRow.append(th);
-    }
+    });
 
     thead.append(headerRow);
     table.append(thead);
@@ -398,8 +415,8 @@ export class Metadata {
       addButton.append(icon);
       addButton.addEventListener('click', () => {
         const emptyRowValue: Record<string, string|number> = {};
-        subFields.forEach(subField => {
-          emptyRowValue[subField.name] = subField.default !== undefined ? subField.default : '';
+        subFieldNames.forEach(subFieldName => {
+          emptyRowValue[subFieldName] = subFields[subFieldName].default !== undefined ? subFields[subFieldName].default : '';
         });
         const row = this.buildMultifieldRow(name, properties, emptyRowValue, holder);
         tbody.append(row);
@@ -427,7 +444,14 @@ export class Metadata {
     const tr = document.createElement('tr');
     tr.dataset.purpose = 'multifield-row';
 
-    const subFields = properties.sub_fields || [];
+    // sub_fields is now an object/map keyed by field name
+    const subFields = properties.sub_fields || {};
+    // Sort sub-field names by position
+    const subFieldNames = Object.keys(subFields).sort((a, b) => {
+      const posA = subFields[a]?.position ?? 0;
+      const posB = subFields[b]?.position ?? 0;
+      return posA - posB;
+    });
 
     // Add remove button cell (only if multiple rows allowed)
     if (properties.readonly !== true && allowMultiple) {
@@ -454,23 +478,21 @@ export class Metadata {
     }
 
     // Add cells for each sub-field
-    for (const subField of subFields) {
+    subFieldNames.forEach(subFieldName => {
+      const subField = subFields[subFieldName];
       const cell = document.createElement('td');
       // Center-align cells for checkbox sub-fields
-      if (subField.type === 'checkbox') {
+      if (subField.type === ExtraFieldInputType.Checkbox) {
         cell.classList.add('text-center');
       }
       const subFieldProps: ExtraFieldProperties = {
         type: subField.type,
-        value: rowValue[subField.name] ?? '',
+        value: rowValue[subFieldName] ?? '',
         options: subField.options,
-        units: subField.units,
-        unit: subField.unit,
         allow_multi_values: false,
         description: subField.description,
-        readonly: subField.readonly,
       };
-      const input = this.generateSingleInput(name, subFieldProps);
+      const input = this.generateSingleInput(subFieldName, subFieldProps);
       // Set data attributes to identify this as a sub-field within a multifield
       // For link fields and other wrapped inputs, the actual input might be nested
       const actualInput = input.tagName === 'INPUT' || input.tagName === 'SELECT' || input.tagName === 'TEXTAREA'
@@ -479,7 +501,7 @@ export class Metadata {
       if (actualInput) {
         actualInput.dataset.multifield = name;
         actualInput.dataset.rowIndex = String(index ?? '');
-        actualInput.dataset.subFieldName = subField.name;
+        actualInput.dataset.subFieldName = subFieldName;
       }
       // Add tooltip for sub-field description
       if (subField.description) {
@@ -491,7 +513,7 @@ export class Metadata {
       }
       cell.append(input);
       tr.append(cell);
-    }
+    });
 
     return tr;
   }
@@ -775,7 +797,7 @@ export class Metadata {
     return row;
   }
 
-  generateViewableValue(properties: ExtraFieldProperties, value: string|number|Array<Map<string, string|number>>): HTMLElement {
+  generateViewableValue(properties: ExtraFieldProperties, value: string|number|Array<Record<string, string|number>>): HTMLElement {
     if (properties.type === ExtraFieldInputType.Checkbox) {
       const valueEl = document.createElement('input');
       valueEl.setAttribute('type', 'checkbox');
@@ -788,8 +810,8 @@ export class Metadata {
     const fieldType2 = properties.type ?? 'text';
     const isMultifield2 = fieldType2 === 'multifield';
     if (isMultifield2) {
-      // Ensure value is an array of objects
-      const valueArray = Array.isArray(value) ? value.filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) : [];
+      // Ensure value is an array of objects (Records)
+      const valueArray = (Array.isArray(value) ? value.filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) : []) as Array<Record<string, string|number>>;
       return this.generateViewableMultifield(properties, valueArray.length > 0 ? valueArray : [{}]);
     }
 
@@ -821,7 +843,20 @@ export class Metadata {
       return container;
     }
 
-    const subFields = properties.sub_fields || [];
+    // sub_fields is now an object/map keyed by field name
+    const subFields = properties.sub_fields || {};
+    // Sort sub-field names by position
+    const subFieldNames = Object.keys(subFields).sort((a, b) => {
+      const posA = subFields[a]?.position ?? 0;
+      const posB = subFields[b]?.position ?? 0;
+      return posA - posB;
+    });
+
+    if (subFieldNames.length === 0) {
+      container.innerText = '—';
+      return container;
+    }
+
     const table = document.createElement('table');
     table.classList.add('table', 'table-sm', 'table-borderless', 'mb-0');
 
@@ -834,15 +869,16 @@ export class Metadata {
     headerRow.append(controlHeader);
 
     // Headers for each sub-field
-    for (const subField of subFields) {
+    subFieldNames.forEach(subFieldName => {
+      const subField = subFields[subFieldName];
       const th = document.createElement('th');
-      th.textContent = subField.name;
+      th.textContent = subFieldName;
       // Add tooltip for sub-field description
       if (subField.description) {
         th.setAttribute('title', subField.description);
       }
       headerRow.append(th);
-    }
+    });
 
     thead.append(headerRow);
     table.append(thead);
@@ -857,9 +893,10 @@ export class Metadata {
       tr.append(controlCell);
 
       // Cells for each sub-field value
-      for (const subField of subFields) {
+      subFieldNames.forEach(subFieldName => {
+        const subField = subFields[subFieldName];
         const cell = document.createElement('td');
-        const subFieldValue = rowValue[subField.name];
+        const subFieldValue = rowValue[subFieldName];
         const subFieldProps: ExtraFieldProperties = {
           type: subField.type,
           value: subFieldValue,
@@ -873,7 +910,7 @@ export class Metadata {
         }
         cell.append(valueEl);
         tr.append(cell);
-      }
+      });
 
       tbody.append(tr);
     }

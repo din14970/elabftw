@@ -58,7 +58,7 @@ function toggleContentDiv(key: string) {
   });
 }
 
-function addMultifieldSubFieldRow(name = '', type = 'text', options?: string[], defaultValue = '', description = ''): void {
+function addMultifieldSubFieldRow(name = '', type = 'text', options?: string[], defaultValue = '', description = '', position = 0): void {
   const container = document.getElementById('newMultifieldSubFieldsContainer');
   if (!container) return;
 
@@ -76,6 +76,13 @@ function addMultifieldSubFieldRow(name = '', type = 'text', options?: string[], 
   nameInput.placeholder = i18next.t('Sub-field name');
   nameInput.value = name;
   inputGroup.appendChild(nameInput);
+
+  // Position input (hidden, auto-assigned)
+  const positionInput = document.createElement('input');
+  positionInput.type = 'hidden';
+  positionInput.className = 'multifield-subfield-position';
+  positionInput.value = String(position);
+  inputGroup.appendChild(positionInput);
 
   // Type select
   const typeSelect = document.createElement('select');
@@ -300,20 +307,24 @@ if (document.getElementById('metadataDiv') && entity.id) {
           const subFieldsContainer = document.getElementById('newMultifieldSubFieldsContainer');
           subFieldsContainer.innerHTML = '';
 
-          if (fieldData.sub_fields && Array.isArray(fieldData.sub_fields)) {
-            fieldData.sub_fields.forEach((subField) => {
+          if (fieldData.sub_fields && typeof fieldData.sub_fields === 'object') {
+            // sub_fields is now an object/map keyed by field name
+            Object.entries(fieldData.sub_fields).forEach(([name, subField]) => {
+              const sf = subField as {type?: string, options?: string[], default?: string|number, description?: string, position?: number};
+              const defaultStr = sf.default !== undefined && sf.default !== null ? String(sf.default) : '';
               addMultifieldSubFieldRow(
-                subField.name || '',
-                subField.type || 'text',
-                subField.options,
-                subField.default || '',
-                subField.description || ''
+                name,
+                sf.type || 'text',
+                sf.options,
+                defaultStr,
+                sf.description || '',
+                sf.position ?? 0
               );
             });
           }
           // Add at least one empty row if no sub-fields
-          if (!fieldData.sub_fields || fieldData.sub_fields.length === 0) {
-            addMultifieldSubFieldRow('', 'text');
+          if (!fieldData.sub_fields || Object.keys(fieldData.sub_fields || {}).length === 0) {
+            addMultifieldSubFieldRow('', 'text', undefined, '', '', 0);
           }
         } else {
           // Default handling for simple text-based inputs
@@ -378,7 +389,7 @@ if (document.getElementById('metadataDiv') && entity.id) {
         // Ensure there's at least one sub-field row
         const container = document.getElementById('newMultifieldSubFieldsContainer');
         if (container && container.children.length === 0) {
-          addMultifieldSubFieldRow();
+          addMultifieldSubFieldRow('', 'text', undefined, '', '', 0);
         }
       }
     });
@@ -419,7 +430,7 @@ if (document.getElementById('metadataDiv') && entity.id) {
         // Initialize with one empty sub-field row
         const container = document.getElementById('newMultifieldSubFieldsContainer');
         if (container && container.children.length === 0) {
-          addMultifieldSubFieldRow();
+          addMultifieldSubFieldRow('', 'text', undefined, '', '', 0);
         }
         break;
       default:
@@ -494,18 +505,22 @@ if (document.getElementById('metadataDiv') && entity.id) {
 
           if (field['type'] === 'multifield') {
             // Handle multifield: collect sub-fields configuration
-            field['sub_fields'] = [];
+            // sub_fields is now an object/map keyed by field name
+            field['sub_fields'] = {};
             const subFieldRows = document.querySelectorAll('.multifield-subfield-row');
+            let position = 0;
             subFieldRows.forEach(row => {
               const nameInput = row.querySelector('.multifield-subfield-name') as HTMLInputElement;
               const typeSelect = row.querySelector('.multifield-subfield-type') as HTMLSelectElement;
               const defaultInput = row.querySelector('.multifield-subfield-default') as HTMLInputElement;
               const descInput = row.querySelector('.multifield-subfield-description') as HTMLInputElement;
+              const positionInput = row.querySelector('.multifield-subfield-position') as HTMLInputElement;
 
-              if (nameInput.value.trim()) {
+              const name = nameInput.value.trim();
+              if (name) {
                 const subField: Record<string, unknown> = {
-                  name: nameInput.value.trim(),
                   type: typeSelect.value as ExtraFieldInputType,
+                  position: position,
                 };
 
                 // Add default value if provided
@@ -530,11 +545,13 @@ if (document.getElementById('metadataDiv') && entity.id) {
                     subField.options = choices;
                   }
                 }
-                field['sub_fields'].push(subField);
+                // Use the name as the key in the sub_fields object
+                field['sub_fields'][name] = subField;
+                position++;
               }
             });
             // Validate that at least one sub-field has a name
-            if (field['sub_fields'].length === 0) {
+            if (Object.keys(field['sub_fields']).length === 0) {
               notify.error('multifield-needs-subfields');
               return;
             }
@@ -677,18 +694,22 @@ if (document.getElementById('metadataDiv') && entity.id) {
             field['value'] = (document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement).value === 'checked' ? 'on' : '';
           } else if (field['type'] === ExtraFieldInputType.Multifield) {
             // Handle multifield: collect sub-fields configuration
-            field['sub_fields'] = [];
+            // sub_fields is now an object/map keyed by field name
+            field['sub_fields'] = {};
             const subFieldRows = document.querySelectorAll('.multifield-subfield-row');
+            let position = 0;
             subFieldRows.forEach(row => {
               const nameInput = row.querySelector('.multifield-subfield-name') as HTMLInputElement;
               const typeSelect = row.querySelector('.multifield-subfield-type') as HTMLSelectElement;
               const defaultInput = row.querySelector('.multifield-subfield-default') as HTMLInputElement;
               const descInput = row.querySelector('.multifield-subfield-description') as HTMLInputElement;
+              const positionInput = row.querySelector('.multifield-subfield-position') as HTMLInputElement;
 
-              if (nameInput.value.trim()) {
+              const name = nameInput.value.trim();
+              if (name) {
                 const subField: Record<string, unknown> = {
-                  name: nameInput.value.trim(),
                   type: typeSelect.value as ExtraFieldInputType,
+                  position: position,
                 };
 
                 // Add default value if provided
@@ -713,11 +734,13 @@ if (document.getElementById('metadataDiv') && entity.id) {
                     subField.options = choices;
                   }
                 }
-                field['sub_fields'].push(subField);
+                // Use the name as the key in the sub_fields object
+                field['sub_fields'][name] = subField;
+                position++;
               }
             });
             // Validate that at least one sub-field has a name
-            if (field['sub_fields'].length === 0) {
+            if (Object.keys(field['sub_fields']).length === 0) {
               notify.error('multifield-needs-subfields');
               return;
             }
@@ -929,8 +952,9 @@ if (document.getElementById('metadataDiv') && entity.id) {
     });
 
     // Add sub-field button handler for multifield
+    let subFieldPosition = 0;
     document.getElementById('multifieldAddSubFieldBtn')?.addEventListener('click', () => {
-      addMultifieldSubFieldRow();
+      addMultifieldSubFieldRow('', 'text', undefined, '', '', subFieldPosition++);
     });
   }
 }

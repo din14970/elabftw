@@ -181,8 +181,8 @@ final class MetadataHelpers
                 }
                 
                 $normalizedRow = array();
-                foreach ($subFields as $subField) {
-                    $subFieldName = $subField['name'] ?? '';
+                // sub_fields is now an associative array keyed by field name
+                foreach ($subFields as $subFieldName => $subField) {
                     $subFieldType = $subField['type'] ?? 'text';
                     $subFieldValue = $row[$subFieldName] ?? null;
                     
@@ -388,8 +388,8 @@ final class MetadataHelpers
                 }
                 // Validate each sub-field in the row
                 $subFields = $field['sub_fields'] ?? array();
-                foreach ($subFields as $subField) {
-                    $subFieldName = $subField['name'] ?? '';
+                // sub_fields is now an associative array keyed by field name
+                foreach ($subFields as $subFieldName => $subField) {
                     $subFieldType = $subField['type'] ?? 'text';
                     $subFieldValue = $row[$subFieldName] ?? null;
                     

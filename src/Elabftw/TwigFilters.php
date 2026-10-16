@@ -131,26 +131,33 @@ final class TwigFilters
                 }
 
                 if (is_array($value)) {
-                    $html = '';
-                    $valueLabels = $field['value_labels'] ?? array();
-                    foreach (array_values($value) as $index => $item) {
-                        $label = '';
-                        if (isset($valueLabels[$index]) && is_string($valueLabels[$index]) && $valueLabels[$index] !== '') {
-                            $label = sprintf(
-                                '<span class="badge badge-pill badge-light">%s</span><br>',
-                                Tools::eLabHtmlspecialchars($valueLabels[$index]),
+                    // Special handling for multifield type
+                    if ($metadataType === 'multifield' && isset($field['sub_fields']) && is_array($field['sub_fields'])) {
+                        $html = self::formatMultifieldValue($field['sub_fields'], $value, $newTab);
+                        $value = $html;
+                        $unit = '';
+                    } else {
+                        $html = '';
+                        $valueLabels = $field['value_labels'] ?? array();
+                        foreach (array_values($value) as $index => $item) {
+                            $label = '';
+                            if (isset($valueLabels[$index]) && is_string($valueLabels[$index]) && $valueLabels[$index] !== '') {
+                                $label = sprintf(
+                                    '<span class="badge badge-pill badge-light">%s</span><br>',
+                                    Tools::eLabHtmlspecialchars($valueLabels[$index]),
+                                );
+                            }
+                            $html .= sprintf(
+                                '<p>%s%s%s</p>',
+                                $label,
+                                self::formatMetadataValue($metadataType, $item, $newTab),
+                                $unit,
                             );
                         }
-                        $html .= sprintf(
-                            '<p>%s%s%s</p>',
-                            $label,
-                            self::formatMetadataValue($metadataType, $item, $newTab),
-                            $unit,
-                        );
+                        $value = $html;
+                        // the unit was rendered once for each value above
+                        $unit = '';
                     }
-                    $value = $html;
-                    // the unit was rendered once for each value above
-                    $unit = '';
                 } else {
                     $value = self::formatMetadataValue($metadataType, $value, $newTab);
                 }
@@ -208,6 +215,40 @@ final class TwigFilters
             return self::array2String($input);
         }
         return '';
+    }
+
+    private static function formatMultifieldValue(array $subFields, array $values, string $newTab): string
+    {
+        if (empty($subFields) || empty($values)) {
+            return '—';
+        }
+
+        // Sort sub-fields by position
+        uksort($subFields, function($a, $b) use ($subFields) {
+            return ($subFields[$a]['position'] ?? 0) - ($subFields[$b]['position'] ?? 0);
+        });
+
+        $html = '<table class="table table-sm table-borderless mb-0"><thead><tr><th style="width: 40px;"></th>';
+        
+        // Create headers
+        foreach ($subFields as $name => $subField) {
+            $title = isset($subField['description']) ? ' title="' . Tools::eLabHtmlspecialchars($subField['description']) . '"' : '';
+            $html .= '<th' . $title . '>' . Tools::eLabHtmlspecialchars($name) . '</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+        
+        // Create rows
+        foreach ($values as $row) {
+            $html .= '<tr><td></td>';
+            foreach ($subFields as $name => $subField) {
+                $subFieldValue = $row[$name] ?? '';
+                $html .= '<td>' . self::formatMetadataValue($subField['type'] ?? 'text', $subFieldValue, $newTab) . '</td>';
+            }
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table>';
+        return $html;
     }
 
     private static function formatMetadataValue(string $metadataType, mixed $value, string $newTab): string

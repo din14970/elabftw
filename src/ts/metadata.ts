@@ -5,10 +5,7 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import {
-  addAutocompleteToExtraFieldsKeyInputs,
-  normalizeFieldName,
-} from './misc';
+import { normalizeFieldName } from './misc';
 import { autoResize, Metadata } from './Metadata.class';
 import { ExtraFieldInputType } from './metadataInterfaces';
 import type { ValidMetadata } from './metadataInterfaces';

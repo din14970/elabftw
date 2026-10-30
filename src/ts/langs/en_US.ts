@@ -177,6 +177,7 @@ const t = {
     "Sub-field type": "Sub-field type",
     "team": "Team",
     "teams": "Teams",
+    "template-entries-updated": "{{updated, number}} entries updated; {{skipped, number}} entries skipped.",
     "template-title": "Template title",
     "text-color": "Text color",
     "is-timestamped": "Is timestamped",

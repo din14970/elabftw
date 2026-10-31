@@ -11,7 +11,7 @@ import { Action, EntityType } from './interfaces';
 import type { Entity } from './interfaces';
 import JsonEditorHelper from './JsonEditorHelper.class';
 import { ExtraFieldInputType } from './metadataInterfaces';
-import type { ExtraFieldProperties, ExtraFieldsGroup, ValidMetadata } from './metadataInterfaces';
+import type { ExtraFieldProperties, ExtraFieldsGroup, SubField, ValidMetadata } from './metadataInterfaces';
 import { adjustHiddenState, makeSortableGreatAgain, reloadElements, replaceWithTitle } from './misc';
 import { notify } from './notify';
 
@@ -313,9 +313,8 @@ export class Metadata {
     holder.dataset.field = name;
     holder.id = this.getRandomId();
 
-    // sub_fields is now an object/map keyed by field name
     const subFields = properties.sub_fields || {};
-    // Sort sub-field names by position
+    // order the columns as defined by the position of each sub-field
     const subFieldNames = Object.keys(subFields).sort((a, b) => {
       const posA = subFields[a]?.position ?? 0;
       const posB = subFields[b]?.position ?? 0;
@@ -326,31 +325,17 @@ export class Metadata {
     if (subFieldNames.length === 0) {
       const warning = document.createElement('div');
       warning.classList.add('alert', 'alert-warning');
-      warning.textContent = i18next.t('multifield-no-subfields') || 'No sub-fields defined. Edit the field to add sub-fields.';
+      warning.textContent = i18next.t('multifield-no-subfields');
       holder.append(warning);
       return holder;
     }
 
-    // Determine if multiple rows are allowed
+    // rows can only be added or removed if multiple values are allowed
     const allowMultiple = properties.allow_multi_values !== false;
 
-    // Ensure value is an array of objects (Maps)
-    const rawValues = Array.isArray(properties.value) ? properties.value : [];
-    // Convert Maps to Records for easier handling, or use as-is
-    let values: Array<Record<string, string|number>> = [];
-
-    for (const v of rawValues) {
-      if (v instanceof Map) {
-        // Convert Map to Record
-        const obj: Record<string, string|number> = {};
-        v.forEach((value, key) => {
-          obj[key] = value;
-        });
-        values.push(obj);
-      } else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-        values.push(v as Record<string, string|number>);
-      }
-    }
+    // the value is an array of rows, one object per row
+    let values = (Array.isArray(properties.value) ? properties.value : [])
+      .filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) as Array<Record<string, string|number>>;
 
     // If not allowing multiple values, ensure only one row
     if (!allowMultiple && values.length > 1) {
@@ -358,13 +343,7 @@ export class Metadata {
     }
 
     if (values.length === 0) {
-      // Initialize with one row with default values from sub-fields
-      const emptyRowValue: Record<string, string|number> = {};
-      subFieldNames.forEach(subFieldName => {
-        const defaultVal = subFields[subFieldName].default;
-        emptyRowValue[subFieldName] = defaultVal !== undefined ? defaultVal : '';
-      });
-      values.push(emptyRowValue);
+      values.push(this.getMultifieldDefaultRow(subFields, subFieldNames));
     }
 
     // Create the table structure for the multifield
@@ -384,9 +363,17 @@ export class Metadata {
       const subField = subFields[subFieldName];
       const th = document.createElement('th');
       th.textContent = subFieldName;
-      // Add tooltip for sub-field description
+      // show the description of the sub-field as tooltip on a question mark icon
+      // the icons have pointer-events: none (see main.scss), so the title attribute
+      // must be on a wrapping element for the tooltip to appear on hover
       if (subField.description) {
-        th.setAttribute('title', subField.description);
+        const descSpan = document.createElement('span');
+        descSpan.classList.add('infotip-icon', 'ml-1');
+        descSpan.setAttribute('title', subField.description);
+        const descIcon = document.createElement('i');
+        descIcon.classList.add('fas', 'fa-circle-question');
+        descSpan.append(descIcon);
+        th.append(descSpan);
       }
       headerRow.append(th);
     });
@@ -397,8 +384,8 @@ export class Metadata {
     const tbody = document.createElement('tbody');
 
     // Create a row for each value
-    for (const [index, rowValue] of values.entries()) {
-      tbody.append(this.buildMultifieldRow(name, properties, rowValue, holder, index, allowMultiple));
+    for (const rowValue of values) {
+      tbody.append(this.buildMultifieldRow(name, properties, rowValue, holder, allowMultiple));
     }
 
     table.append(tbody);
@@ -414,11 +401,13 @@ export class Metadata {
       icon.classList.add('fas', 'fa-plus');
       addButton.append(icon);
       addButton.addEventListener('click', () => {
-        const emptyRowValue: Record<string, string|number> = {};
-        subFieldNames.forEach(subFieldName => {
-          emptyRowValue[subFieldName] = subFields[subFieldName].default !== undefined ? subFields[subFieldName].default : '';
-        });
-        const row = this.buildMultifieldRow(name, properties, emptyRowValue, holder);
+        const row = this.buildMultifieldRow(
+          name,
+          properties,
+          this.getMultifieldDefaultRow(subFields, subFieldNames),
+          holder,
+          allowMultiple,
+        );
         tbody.append(row);
         // Focus the first input in the new row
         const firstInput = row.querySelector<HTMLElement>('input, select, textarea');
@@ -433,29 +422,39 @@ export class Metadata {
     return holder;
   }
 
+  // build a new row with the default values of the sub-fields, sparsely: only set keys with a default
+  getMultifieldDefaultRow(subFields: SubField, subFieldNames: string[]): Record<string, string|number> {
+    const rowValue: Record<string, string|number> = {};
+    subFieldNames.forEach(subFieldName => {
+      const defaultValue = subFields[subFieldName].default;
+      if (defaultValue !== undefined) {
+        rowValue[subFieldName] = defaultValue;
+      }
+    });
+    return rowValue;
+  }
+
   buildMultifieldRow(
     name: string,
     properties: ExtraFieldProperties,
     rowValue: Record<string, string|number>,
     holder: HTMLElement,
-    index?: number,
     allowMultiple: boolean = true,
   ): HTMLElement {
     const tr = document.createElement('tr');
     tr.dataset.purpose = 'multifield-row';
 
-    // sub_fields is now an object/map keyed by field name
     const subFields = properties.sub_fields || {};
-    // Sort sub-field names by position
+    // order the columns as defined by the position of each sub-field
     const subFieldNames = Object.keys(subFields).sort((a, b) => {
       const posA = subFields[a]?.position ?? 0;
       const posB = subFields[b]?.position ?? 0;
       return posA - posB;
     });
 
-    // Add remove button cell (only if multiple rows allowed)
+    // First cell holds the remove row button, only if rows can be removed
+    const controlCell = document.createElement('td');
     if (properties.readonly !== true && allowMultiple) {
-      const controlCell = document.createElement('td');
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
       removeButton.classList.add('btn', 'btn-secondary', 'btn-sm');
@@ -469,13 +468,8 @@ export class Metadata {
         this.saveMultifieldHolder(holder);
       });
       controlCell.append(removeButton);
-      tr.append(controlCell);
-    } else if (properties.readonly !== true) {
-      // Add empty cell for alignment when not allowing multiple
-      const controlCell = document.createElement('td');
-      controlCell.style.width = '40px';
-      tr.append(controlCell);
     }
+    tr.append(controlCell);
 
     // Add cells for each sub-field
     subFieldNames.forEach(subFieldName => {
@@ -491,25 +485,17 @@ export class Metadata {
         options: subField.options,
         allow_multi_values: false,
         description: subField.description,
+        readonly: properties.readonly,
       };
       const input = this.generateSingleInput(subFieldName, subFieldProps);
-      // Set data attributes to identify this as a sub-field within a multifield
-      // For link fields and other wrapped inputs, the actual input might be nested
+      // Set data attributes to identify this as a sub-field within a multifield.
+      // For link fields and other wrapped inputs, the actual input might be nested.
       const actualInput = input.tagName === 'INPUT' || input.tagName === 'SELECT' || input.tagName === 'TEXTAREA'
         ? input as HTMLElement
         : input.querySelector<HTMLElement>('input, select, textarea');
       if (actualInput) {
         actualInput.dataset.multifield = name;
-        actualInput.dataset.rowIndex = String(index ?? '');
         actualInput.dataset.subFieldName = subFieldName;
-      }
-      // Add tooltip for sub-field description
-      if (subField.description) {
-        if (actualInput) {
-          actualInput.setAttribute('title', subField.description);
-        } else {
-          input.setAttribute('title', subField.description);
-        }
       }
       cell.append(input);
       tr.append(cell);
@@ -558,11 +544,9 @@ export class Metadata {
     holder.dataset.inputType = properties.type ?? ExtraFieldInputType.Text;
     holder.id = this.getRandomId();
 
-    // buildMultiValueInput should not be called for multifield types
-    // Ensure values are scalar
     const values = Array.isArray(properties.value)
-      ? properties.value.filter(v => typeof v === 'string' || typeof v === 'number')
-      : [String(properties.value ?? '')];
+      ? [...properties.value as Array<string|number>]
+      : [properties.value ?? ''];
     if (values.length === 0) {
       values.push('');
     }
@@ -760,36 +744,34 @@ export class Metadata {
     const valueCell = document.createElement('td');
     valueCell.classList.add('align-top');
 
-    // Special handling for multifield: the entire array is the value
-    const fieldType = properties.type ?? 'text';
-    const isMultifield = fieldType === 'multifield';
-    if (isMultifield) {
-      const values = Array.isArray(properties.value) ? properties.value : [];
-      const valueArray = values.filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) as Array<Record<string, string|number>>;
-      valueCell.append(this.generateViewableValue(properties, valueArray.length > 0 ? valueArray : [{}]));
-    } else if (properties.allow_multi_values === true && Array.isArray(properties.value)) {
-      // Multi-value non-multifield: show each value separately
-      if (properties.value.length === 0) {
-        valueCell.append(this.generateViewableValue(properties, ''));
-      } else {
-        for (const [index, value] of properties.value.entries()) {
-          const valueRow = document.createElement('div');
-          valueRow.classList.add('mb-2');
-          const label = properties.value_labels?.[index];
-          if (label) {
-            const labelBadge = document.createElement('span');
-            labelBadge.classList.add('badge', 'badge-pill', 'badge-light', 'mb-1');
-            labelBadge.dataset.purpose = 'value-label';
-            labelBadge.textContent = label;
-            valueRow.append(labelBadge);
-          }
-          valueRow.append(this.generateViewableValue(properties, value as string|number));
-          valueCell.append(valueRow);
-        }
-      }
+    if (properties.type === ExtraFieldInputType.Multifield) {
+      // the value of a multifield is an array of rows, displayed as one table
+      const values = (Array.isArray(properties.value) ? properties.value : [])
+        .filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) as Array<Record<string, string|number>>;
+      valueCell.append(this.generateViewableValue(properties, values));
+      row.append(nameCell, valueCell);
+      return row;
+    }
+
+    const values = Array.isArray(properties.value) ? properties.value : [properties.value];
+    if (values.length === 0) {
+      valueCell.append(this.generateViewableValue(properties, ''));
     } else {
-      const value = properties.value;
-      valueCell.append(this.generateViewableValue(properties, value as string|number));
+      for (const [index, value] of values.entries()) {
+        // Keep the label above its value, matching the editable rows.
+        const valueRow = document.createElement('div');
+        valueRow.classList.add('mb-2');
+        const label = properties.value_labels?.[index];
+        if (label) {
+          const labelBadge = document.createElement('span');
+          labelBadge.classList.add('badge', 'badge-pill', 'badge-light', 'mb-1');
+          labelBadge.dataset.purpose = 'value-label';
+          labelBadge.textContent = label;
+          valueRow.append(labelBadge);
+        }
+        valueRow.append(this.generateViewableValue(properties, value as string|number));
+        valueCell.append(valueRow);
+      }
     }
 
     row.append(nameCell, valueCell);
@@ -806,12 +788,9 @@ export class Metadata {
       return valueEl;
     }
 
-    const fieldType2 = properties.type ?? 'text';
-    const isMultifield2 = fieldType2 === 'multifield';
-    if (isMultifield2) {
-      // Ensure value is an array of objects (Records)
-      const valueArray = (Array.isArray(value) ? value.filter(v => typeof v === 'object' && v !== null && !Array.isArray(v)) : []) as Array<Record<string, string|number>>;
-      return this.generateViewableMultifield(properties, valueArray.length > 0 ? valueArray : [{}]);
+    if (properties.type === ExtraFieldInputType.Multifield) {
+      // a multifield is displayed as a table with one row per value
+      return this.generateViewableMultifield(properties, value as Array<Record<string, string|number>>);
     }
 
     const valueEl = document.createElement('div');
@@ -837,14 +816,14 @@ export class Metadata {
     const container = document.createElement('div');
     container.classList.add('multifield-view-container');
 
-    if (!values || values.length === 0) {
+    const rows = Array.isArray(values) ? values : [];
+    if (rows.length === 0) {
       container.innerText = '—';
       return container;
     }
 
-    // sub_fields is now an object/map keyed by field name
     const subFields = properties.sub_fields || {};
-    // Sort sub-field names by position
+    // order the columns as defined by the position of each sub-field
     const subFieldNames = Object.keys(subFields).sort((a, b) => {
       const posA = subFields[a]?.position ?? 0;
       const posB = subFields[b]?.position ?? 0;
@@ -862,19 +841,22 @@ export class Metadata {
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
 
-    // Empty header for spacing
-    const controlHeader = document.createElement('th');
-    controlHeader.style.width = '40px';
-    headerRow.append(controlHeader);
-
     // Headers for each sub-field
     subFieldNames.forEach(subFieldName => {
       const subField = subFields[subFieldName];
       const th = document.createElement('th');
       th.textContent = subFieldName;
-      // Add tooltip for sub-field description
+      // show the description of the sub-field as tooltip on a question mark icon
+      // the icons have pointer-events: none (see main.scss), so the title attribute
+      // must be on a wrapping element for the tooltip to appear on hover
       if (subField.description) {
-        th.setAttribute('title', subField.description);
+        const descSpan = document.createElement('span');
+        descSpan.classList.add('infotip-icon', 'ml-1');
+        descSpan.setAttribute('title', subField.description);
+        const descIcon = document.createElement('i');
+        descIcon.classList.add('fas', 'fa-circle-question');
+        descSpan.append(descIcon);
+        th.append(descSpan);
       }
       headerRow.append(th);
     });
@@ -884,12 +866,8 @@ export class Metadata {
 
     const tbody = document.createElement('tbody');
 
-    for (const rowValue of values) {
+    for (const rowValue of rows) {
       const tr = document.createElement('tr');
-
-      // Empty cell for alignment
-      const controlCell = document.createElement('td');
-      tr.append(controlCell);
 
       // Cells for each sub-field value
       subFieldNames.forEach(subFieldName => {
@@ -903,11 +881,19 @@ export class Metadata {
           description: subField.description,
         };
         const valueEl = this.generateViewableValue(subFieldProps, subFieldValue as string|number);
-        // Add tooltip for sub-field description
-        if (subField.description) {
-          valueEl.setAttribute('title', subField.description);
+        // render links to experiments and resources as clickable links, like the php view mode does
+        if (subFieldValue !== ''
+          && (subField.type === ExtraFieldInputType.Experiments || subField.type === ExtraFieldInputType.Items)) {
+          const link = document.createElement('a');
+          const page = subField.type === ExtraFieldInputType.Items ? 'database.php' : 'experiments.php';
+          link.href = `/${page}?mode=view&id=${encodeURIComponent(String(subFieldValue))}`;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.append(valueEl);
+          cell.append(link);
+        } else {
+          cell.append(valueEl);
         }
-        cell.append(valueEl);
         tr.append(cell);
       });
 
@@ -923,10 +909,10 @@ export class Metadata {
    * Take the json description of the field and build an input element to be injected
    */
   generateInput(name: string, properties: ExtraFieldProperties): Element {
-    const normalizedType = properties.type ?? 'text';
-    const isMultifieldType = normalizedType === 'multifield';
-    const isSelectType = normalizedType === 'select';
-    if (properties.allow_multi_values === true && !isSelectType && !isMultifieldType) {
+    // a multifield handles its multiple values itself, and select uses a multiple select element
+    if (properties.allow_multi_values === true
+      && properties.type !== ExtraFieldInputType.Select
+      && properties.type !== ExtraFieldInputType.Multifield) {
       return this.buildMultiValueInput(name, properties);
     }
     return this.generateSingleInput(name, properties);
@@ -960,10 +946,11 @@ export class Metadata {
         element.toggleAttribute('multiple');
       }
       // add options to select element
-      for (const option of properties.options) {
+      // a select without options is valid: it will simply be an empty dropdown
+      for (const option of properties.options ?? []) {
         const optionEl = document.createElement('option');
         optionEl.text = option;
-        // For select, value is string or array of strings
+        // the value of a select is a scalar or a flat array, other value shapes are not relevant here
         const selectValue = properties.value as string|number|Array<string|number>;
         if (properties.allow_multi_values === true
           && (Array.isArray(selectValue) ? selectValue : [selectValue]).includes(option)

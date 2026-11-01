@@ -175,6 +175,7 @@ const t = {
     "step-delete-warning": "Delete this step?",
     "step-unfinish-warning": "Are you sure you want to undo this step?",
     "sub-field-name": "Sub-field name",
+    "subfield-names-must-be-unique": "Sub-field names must be unique.",
     "tag-delete-warning": "Delete this tag?",
     "tags": "Tags",
     "table-options": "Table options",

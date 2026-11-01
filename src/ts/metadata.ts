@@ -58,10 +58,14 @@ function toggleContentDiv(key: string) {
 // build the sub_fields object of a multifield from the modal rows
 // returns an object keyed by sub-field name, or an empty object if no row has a name
 // also returns a map of renamed sub-fields (original name -> new name),
-// so the keys of the stored values can be remapped on save
-function collectMultifieldSubFields(): { subFields: Record<string, Record<string, unknown>>, renames: Record<string, string> } {
+// so the keys of the stored values can be remapped on save,
+// and the names that are used more than once, if any
+function collectMultifieldSubFields(): { subFields: Record<string, Record<string, unknown>>, renames: Record<string, string>, duplicates: string[] } {
   const subFields: Record<string, Record<string, unknown>> = {};
-  const renames: Record<string, string> = {};
+  // a map without a prototype, so a lookup for a name like "constructor" cannot hit an inherited property
+  const renames: Record<string, string> = Object.create(null);
+  const duplicates: string[] = [];
+  const seen = new Set<string>();
   let position = 0;
   document.querySelectorAll('.multifield-subfield-row').forEach(row => {
     const name = (row.querySelector('.multifield-subfield-name') as HTMLInputElement).value.trim();
@@ -69,6 +73,12 @@ function collectMultifieldSubFields(): { subFields: Record<string, Record<string
     if (!name) {
       return;
     }
+    // a name used twice would silently overwrite the value of the first sub-field with that name
+    if (seen.has(name)) {
+      duplicates.push(name);
+      return;
+    }
+    seen.add(name);
     // keep track of sub-fields that get renamed, so their stored values can follow
     const originalName = (row as HTMLElement).dataset.subFieldName ?? '';
     if (originalName && originalName !== name) {
@@ -99,7 +109,7 @@ function collectMultifieldSubFields(): { subFields: Record<string, Record<string
     }
     subFields[name] = subField;
   });
-  return { subFields, renames };
+  return { subFields, renames, duplicates };
 }
 
 function addMultifieldSubFieldRow(name = '', type = ExtraFieldInputType.Text, options?: string[], defaultValue = '', description = ''): void {
@@ -516,7 +526,11 @@ if (document.getElementById('metadataDiv') && entity.id) {
 
           if (field['type'] === ExtraFieldInputType.Multifield) {
             // a multifield is defined by its sub-fields
-            const { subFields } = collectMultifieldSubFields();
+            const { subFields, duplicates } = collectMultifieldSubFields();
+            if (duplicates.length > 0) {
+              notify.error('subfield-names-must-be-unique');
+              return;
+            }
             field['sub_fields'] = subFields;
             if (Object.keys(subFields).length === 0) {
               notify.error('multifield-needs-subfields');
@@ -665,7 +679,11 @@ if (document.getElementById('metadataDiv') && entity.id) {
             field['value'] = (document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement).value === 'checked' ? 'on' : '';
           } else if (field['type'] === ExtraFieldInputType.Multifield) {
             // a multifield is defined by its sub-fields
-            const { subFields, renames } = collectMultifieldSubFields();
+            const { subFields, renames, duplicates } = collectMultifieldSubFields();
+            if (duplicates.length > 0) {
+              notify.error('subfield-names-must-be-unique');
+              return;
+            }
             field['sub_fields'] = subFields;
             if (Object.keys(subFields).length === 0) {
               notify.error('multifield-needs-subfields');

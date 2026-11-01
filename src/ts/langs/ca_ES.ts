@@ -175,6 +175,7 @@ const t = {
     "step-delete-warning": "Voleu eliminar aquest pas?",
     "step-unfinish-warning": "Estàs segura de voler desfer aquest pas?",
     "sub-field-name": "Sub-field name",
+    "subfield-names-must-be-unique": "Sub-field names must be unique.",
     "tag-delete-warning": "Vols suprimir aquesta etiqueta?",
     "tags": "Etiquetes",
     "table-options": "Table options",

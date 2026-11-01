@@ -175,6 +175,7 @@ const t = {
     "step-delete-warning": "Odstrániť tento krok?",
     "step-unfinish-warning": "Naozaj chceš vrátiť krok späť ?",
     "sub-field-name": "Sub-field name",
+    "subfield-names-must-be-unique": "Sub-field names must be unique.",
     "tag-delete-warning": "Odstrániť túto značku?",
     "tags": "Štítky",
     "table-options": "Table options",

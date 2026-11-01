@@ -175,6 +175,7 @@ const t = {
     "step-delete-warning": "Hapus langkah ini?",
     "step-unfinish-warning": "Anda yakin ingin mengurungkan langkah ini?",
     "sub-field-name": "Sub-field name",
+    "subfield-names-must-be-unique": "Sub-field names must be unique.",
     "tag-delete-warning": "Hapus label ini?",
     "tags": "Label",
     "table-options": "Table options",

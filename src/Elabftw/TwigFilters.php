@@ -246,6 +246,10 @@ final class TwigFilters
 
         // one table row per value, with one cell per sub-field
         foreach ($values as $row) {
+            // ignore malformed rows, so they cannot break the table
+            if (!is_array($row)) {
+                continue;
+            }
             $html .= '<tr>';
             foreach ($subFields as $name => $subField) {
                 $subFieldValue = $row[$name] ?? '';

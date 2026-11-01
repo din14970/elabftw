@@ -305,6 +305,27 @@ class TwigFiltersTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
     }
 
+    public function testFormatMetadataWithMultifieldSkipsInvalidRows(): void
+    {
+        $metadataJson = '{
+          "extra_fields": {
+            "MyMulti": {
+              "type": "multifield",
+              "sub_fields": {
+                "first": {"type": "text", "position": 0}
+              },
+              "value": [
+                "not a row",
+                {"first": "valid"}
+              ]
+            }
+          }
+        }';
+        $expected = '<div><h4 data-action=\'toggle-next\' data-opened-icon=\'fa-caret-down\' data-closed-icon=\'fa-caret-right\' class=\'mt-4 d-inline togglable-section-title\'><i class=\'fas fa-caret-down fa-fw mr-2\'></i>Default group</h4><ul class="list-group"><li class="list-group-item"><h5 class="mb-0">MyMulti</h5><h6><table class="table table-sm table-borderless mb-0"><thead><tr><th>first</th></tr></thead><tbody><tr><td>valid</td></tr></tbody></table></h6></li></ul></div>';
+
+        $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
+    }
+
     public function testFormatMetadataWithEmptyMultifield(): void
     {
         $metadataJson = '{

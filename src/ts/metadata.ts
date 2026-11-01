@@ -57,14 +57,22 @@ function toggleContentDiv(key: string) {
 
 // build the sub_fields object of a multifield from the modal rows
 // returns an object keyed by sub-field name, or an empty object if no row has a name
-function collectMultifieldSubFields(): Record<string, Record<string, unknown>> {
+// also returns a map of renamed sub-fields (original name -> new name),
+// so the keys of the stored values can be remapped on save
+function collectMultifieldSubFields(): { subFields: Record<string, Record<string, unknown>>, renames: Record<string, string> } {
   const subFields: Record<string, Record<string, unknown>> = {};
+  const renames: Record<string, string> = {};
   let position = 0;
   document.querySelectorAll('.multifield-subfield-row').forEach(row => {
     const name = (row.querySelector('.multifield-subfield-name') as HTMLInputElement).value.trim();
     // skip rows without a name
     if (!name) {
       return;
+    }
+    // keep track of sub-fields that get renamed, so their stored values can follow
+    const originalName = (row as HTMLElement).dataset.subFieldName ?? '';
+    if (originalName && originalName !== name) {
+      renames[originalName] = name;
     }
     const typeSelect = row.querySelector('.multifield-subfield-type') as HTMLSelectElement;
     const subField: Record<string, unknown> = {
@@ -91,7 +99,7 @@ function collectMultifieldSubFields(): Record<string, Record<string, unknown>> {
     }
     subFields[name] = subField;
   });
-  return subFields;
+  return { subFields, renames };
 }
 
 function addMultifieldSubFieldRow(name = '', type = ExtraFieldInputType.Text, options?: string[], defaultValue = '', description = ''): void {
@@ -508,8 +516,9 @@ if (document.getElementById('metadataDiv') && entity.id) {
 
           if (field['type'] === ExtraFieldInputType.Multifield) {
             // a multifield is defined by its sub-fields
-            field['sub_fields'] = collectMultifieldSubFields();
-            if (Object.keys(field['sub_fields']).length === 0) {
+            const { subFields } = collectMultifieldSubFields();
+            field['sub_fields'] = subFields;
+            if (Object.keys(subFields).length === 0) {
               notify.error('multifield-needs-subfields');
               return;
             }
@@ -656,15 +665,25 @@ if (document.getElementById('metadataDiv') && entity.id) {
             field['value'] = (document.getElementById('newFieldCheckboxDefaultSelect') as HTMLSelectElement).value === 'checked' ? 'on' : '';
           } else if (field['type'] === ExtraFieldInputType.Multifield) {
             // a multifield is defined by its sub-fields
-            field['sub_fields'] = collectMultifieldSubFields();
-            if (Object.keys(field['sub_fields']).length === 0) {
+            const { subFields, renames } = collectMultifieldSubFields();
+            field['sub_fields'] = subFields;
+            if (Object.keys(subFields).length === 0) {
               notify.error('multifield-needs-subfields');
               return;
             }
             // keep the existing rows, but only the first one if multiple values are not allowed
             const allowMulti = (document.getElementById('newFieldAllowMultiSelect') as HTMLInputElement).checked;
             field['allow_multi_values'] = allowMulti;
-            const prevRows = Array.isArray(prevField?.value) ? prevField.value : [];
+            // remap the keys of the stored rows to the new name of a renamed sub-field
+            const prevRows = (Array.isArray(prevField?.value) ? prevField.value : [])
+              .filter((row): row is Record<string, string|number> => typeof row === 'object' && row !== null && !Array.isArray(row))
+              .map((row): Record<string, string|number> => {
+                const remappedRow: Record<string, string|number> = {};
+                for (const key of Object.keys(row)) {
+                  remappedRow[renames[key] ?? key] = row[key] as string|number;
+                }
+                return remappedRow;
+              });
             field['value'] = prevRows.length > 0
               ? (allowMulti ? prevRows : [prevRows[0]])
               : [{}];

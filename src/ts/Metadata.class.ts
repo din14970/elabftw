@@ -331,7 +331,8 @@ export class Metadata {
     }
 
     // rows can only be added or removed if multiple values are allowed
-    const allowMultiple = properties.allow_multi_values !== false;
+    // the default matches the server side: no allow_multi_values key means single row
+    const allowMultiple = properties.allow_multi_values === true;
 
     // the value is an array of rows, one object per row
     let values = (Array.isArray(properties.value) ? properties.value : [])

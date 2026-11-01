@@ -252,4 +252,89 @@ class TwigFiltersTest extends \PHPUnit\Framework\TestCase
         $formatted = '44HN HIFE CEJC IBZO V4TR JZGM XVYM OYG6';
         $this->assertSame($formatted, TwigFilters::formatMfaSecret('44HNHIFECEJCIBZOV4TRJZGMXVYMOYG6'));
     }
+
+    public function testFormatMetadataWithMultifield(): void
+    {
+        $metadataJson = '{
+          "extra_fields": {
+            "MyMulti": {
+              "type": "multifield",
+              "allow_multi_values": true,
+              "sub_fields": {
+                "second": {
+                  "type": "text",
+                  "position": 1
+                },
+                "first": {
+                  "type": "text",
+                  "position": 0,
+                  "description": "first column"
+                }
+              },
+              "value": [
+                {"first": "a<b", "second": "b"},
+                {"second": "only second"}
+              ]
+            }
+          }
+        }';
+        $expected = '<div><h4 data-action=\'toggle-next\' data-opened-icon=\'fa-caret-down\' data-closed-icon=\'fa-caret-right\' class=\'mt-4 d-inline togglable-section-title\'><i class=\'fas fa-caret-down fa-fw mr-2\'></i>Default group</h4><ul class="list-group"><li class="list-group-item"><h5 class="mb-0">MyMulti</h5><h6><table class="table table-sm table-borderless mb-0"><thead><tr><th>first<span class="infotip-icon ml-1" title="first column"><i class="fas fa-circle-question" aria-hidden="true"></i></span></th><th>second</th></tr></thead><tbody><tr><td>a&lt;b</td><td>b</td></tr><tr><td></td><td>only second</td></tr></tbody></table></h6></li></ul></div>';
+
+        $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
+    }
+
+    public function testFormatMetadataWithMultifieldLinkSubField(): void
+    {
+        $metadataJson = '{
+          "extra_fields": {
+            "MyMulti": {
+              "type": "multifield",
+              "sub_fields": {
+                "res": {"type": "items", "position": 0},
+                "exp": {"type": "experiments", "position": 1}
+              },
+              "value": [
+                {"res": "42", "exp": "1"},
+                {"exp": "2"}
+              ]
+            }
+          }
+        }';
+        $expected = '<div><h4 data-action=\'toggle-next\' data-opened-icon=\'fa-caret-down\' data-closed-icon=\'fa-caret-right\' class=\'mt-4 d-inline togglable-section-title\'><i class=\'fas fa-caret-down fa-fw mr-2\'></i>Default group</h4><ul class="list-group"><li class="list-group-item"><h5 class="mb-0">MyMulti</h5><h6><table class="table table-sm table-borderless mb-0"><thead><tr><th>res</th><th>exp</th></tr></thead><tbody><tr><td><a href="/database.php?mode=view&amp;id=42" target="_blank" rel="noopener"><span data-replace-with-title="true" data-id="42" data-endpoint="items">42</span></a></td><td><a href="/experiments.php?mode=view&amp;id=1" target="_blank" rel="noopener"><span data-replace-with-title="true" data-id="1" data-endpoint="experiments">1</span></a></td></tr><tr><td></td><td><a href="/experiments.php?mode=view&amp;id=2" target="_blank" rel="noopener"><span data-replace-with-title="true" data-id="2" data-endpoint="experiments">2</span></a></td></tr></tbody></table></h6></li></ul></div>';
+
+        $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
+    }
+
+    public function testFormatMetadataWithEmptyMultifield(): void
+    {
+        $metadataJson = '{
+          "extra_fields": {
+            "MyMulti": {
+              "type": "multifield",
+              "sub_fields": {
+                "first": {"type": "text", "position": 0}
+              },
+              "value": []
+            }
+          }
+        }';
+        $expected = '<div><h4 data-action=\'toggle-next\' data-opened-icon=\'fa-caret-down\' data-closed-icon=\'fa-caret-right\' class=\'mt-4 d-inline togglable-section-title\'><i class=\'fas fa-caret-down fa-fw mr-2\'></i>Default group</h4><ul class="list-group"><li class="list-group-item"><h5 class="mb-0">MyMulti</h5><h6>—</h6></li></ul></div>';
+
+        $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
+    }
+
+    public function testFormatMetadataWithMultifieldWithoutSubFields(): void
+    {
+        $metadataJson = '{
+          "extra_fields": {
+            "MyMulti": {
+              "type": "multifield",
+              "value": [{"a": "b"}]
+            }
+          }
+        }';
+        $expected = '<div><h4 data-action=\'toggle-next\' data-opened-icon=\'fa-caret-down\' data-closed-icon=\'fa-caret-right\' class=\'mt-4 d-inline togglable-section-title\'><i class=\'fas fa-caret-down fa-fw mr-2\'></i>Default group</h4><ul class="list-group"><li class="list-group-item"><h5 class="mb-0">MyMulti</h5><h6>—</h6></li></ul></div>';
+
+        $this->assertEquals($expected, TwigFilters::formatMetadata($metadataJson));
+    }
 }

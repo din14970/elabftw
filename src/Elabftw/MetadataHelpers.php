@@ -23,6 +23,7 @@ use function array_column;
 use function array_diff_key;
 use function array_map;
 use function array_search;
+use function array_slice;
 use function explode;
 use function in_array;
 use function is_array;
@@ -38,6 +39,7 @@ use function str_replace;
 use function trim;
 use function mb_strtolower;
 use function date_parse;
+use function array_values;
 
 final class MetadataHelpers
 {
@@ -217,42 +219,46 @@ final class MetadataHelpers
         $type = $field['type'] ?? 'text';
 
         if ($type === 'multifield') {
-            // For multifield, value is an array of objects - normalize each sub-field
+            // the value of a multifield is an array of rows, normalize each sub-field value
             if (!is_array($value)) {
                 return array();
             }
-            
-            $normalizedRows = array();
+
+            // without allow_multi_values only a single row can be stored,
+            // so the extra rows are removed, like the interface does
+            if (($field['allow_multi_values'] ?? false) !== true) {
+                $value = array_slice($value, 0, 1);
+            }
+
             $subFields = $field['sub_fields'] ?? array();
-            
+            $normalizedRows = array();
             foreach ($value as $row) {
                 if (!is_array($row)) {
                     continue;
                 }
-                
                 $normalizedRow = array();
-                // sub_fields is now an associative array keyed by field name
                 foreach ($subFields as $subFieldName => $subField) {
-                    $subFieldType = $subField['type'] ?? 'text';
                     $subFieldValue = $row[$subFieldName] ?? null;
-                    
-                    if ($subFieldValue !== null) {
-                        // Create a temporary field definition for the sub-field
-                        $subFieldDef = array(
-                            'type' => $subFieldType,
-                            'options' => $subField['options'] ?? array(),
-                        );
-                        $normalizedRow[$subFieldName] = self::normalizeMetadataScalarValue(
-                            $name . '.' . $subFieldName,
-                            $subFieldType,
-                            $subFieldValue,
-                            $preserveNumericTypes,
-                        );
+                    // keep the stored value sparse: keys without value are not added back
+                    if ($subFieldValue === null || $subFieldValue === '') {
+                        continue;
+                    }
+                    $normalizedValue = self::normalizeMetadataScalarValue(
+                        $name . '.' . $subFieldName,
+                        $subField['type'] ?? 'text',
+                        $subFieldValue,
+                        $preserveNumericTypes,
+                    );
+                    if ($normalizedValue !== '') {
+                        $normalizedRow[$subFieldName] = $normalizedValue;
                     }
                 }
-                $normalizedRows[] = $normalizedRow;
+                // a row without any value is dropped, like the interface does
+                if ($normalizedRow !== array()) {
+                    $normalizedRows[] = $normalizedRow;
+                }
             }
-            
+
             return $normalizedRows;
         }
 
@@ -392,6 +398,11 @@ final class MetadataHelpers
         $type = $field['type'] ?? 'text';
         $isMulti = self::isMultiValueField($field);
 
+        if ($type === 'multifield') {
+            self::guardMultifieldValueCompatibility($name, $field, $value);
+            return;
+        }
+
         if (is_array($value)) {
             if (!$isMulti) {
                 throw new ImproperActionException(
@@ -411,45 +422,12 @@ final class MetadataHelpers
             $values = array($value);
         }
 
-        // For multifield, values are arrays of associative arrays (objects), so skip scalar check
-        if ($type !== 'multifield') {
-            foreach ($values as $item) {
-                if ($item !== null && !is_scalar($item)) {
-                    throw new ImproperActionException(
-                        sprintf(_('Metadata field %s contains an invalid value.'), $name)
-                    );
-                }
-            }
-        }
-
-        if ($type === 'multifield') {
-            // Validate multifield: value should be array of objects
-            if (!is_array($value)) {
+        foreach ($values as $item) {
+            if ($item !== null && !is_scalar($item)) {
                 throw new ImproperActionException(
-                    sprintf(_('Metadata field %s expects an array of objects.'), $name)
+                    sprintf(_('Metadata field %s contains an invalid value.'), $name)
                 );
             }
-            // Validate each row
-            foreach ($value as $rowIndex => $row) {
-                if (!is_array($row)) {
-                    throw new ImproperActionException(
-                        sprintf(_('Metadata field %s row %d is not an object.'), $name, $rowIndex)
-                    );
-                }
-                // Validate each sub-field in the row
-                $subFields = $field['sub_fields'] ?? array();
-                // sub_fields is now an associative array keyed by field name
-                foreach ($subFields as $subFieldName => $subField) {
-                    $subFieldType = $subField['type'] ?? 'text';
-                    $subFieldValue = $row[$subFieldName] ?? null;
-                    
-                    // Recursively validate the sub-field value
-                    if ($subFieldValue !== null && $subFieldValue !== '') {
-                        self::guardMetadataValueCompatibility("$name.$subFieldName", $subField, $subFieldValue);
-                    }
-                }
-            }
-            return;
         }
 
         if ($type === 'number') {
@@ -493,6 +471,34 @@ final class MetadataHelpers
                         $name,
                     )
                 );
+            }
+        }
+    }
+
+    /**
+     * The value of a multifield is an array of rows, each row an associative array of sub-field values.
+     * Each sub-field value is validated against the type defined for that sub-field.
+     */
+    private static function guardMultifieldValueCompatibility(string $name, array $field, mixed $value): void
+    {
+        if (!is_array($value)) {
+            throw new ImproperActionException(
+                sprintf(_('Metadata field %s expects an array of objects.'), $name)
+            );
+        }
+
+        $subFields = $field['sub_fields'] ?? array();
+        foreach (array_values($value) as $rowIndex => $row) {
+            if (!is_array($row)) {
+                throw new ImproperActionException(
+                    sprintf(_('Metadata field %s row %d is not an object.'), $name, $rowIndex)
+                );
+            }
+            foreach ($subFields as $subFieldName => $subField) {
+                $subFieldValue = $row[$subFieldName] ?? null;
+                if ($subFieldValue !== null && $subFieldValue !== '') {
+                    self::guardMetadataValueCompatibility($name . '.' . $subFieldName, $subField, $subFieldValue);
+                }
             }
         }
     }

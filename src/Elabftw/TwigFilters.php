@@ -35,6 +35,7 @@ use function array_key_exists;
 use function in_array;
 use function trim;
 use function array_values;
+use function uksort;
 
 /**
  * Twig filters
@@ -130,34 +131,31 @@ final class TwigFilters
                     $unit = ' ' . Tools::eLabHtmlspecialchars($field['unit']);
                 }
 
-                if (is_array($value)) {
-                    // Special handling for multifield type
-                    if ($metadataType === 'multifield' && isset($field['sub_fields']) && is_array($field['sub_fields'])) {
-                        $html = self::formatMultifieldValue($field['sub_fields'], $value, $newTab);
-                        $value = $html;
-                        $unit = '';
-                    } else {
-                        $html = '';
-                        $valueLabels = $field['value_labels'] ?? array();
-                        foreach (array_values($value) as $index => $item) {
-                            $label = '';
-                            if (isset($valueLabels[$index]) && is_string($valueLabels[$index]) && $valueLabels[$index] !== '') {
-                                $label = sprintf(
-                                    '<span class="badge badge-pill badge-light">%s</span><br>',
-                                    Tools::eLabHtmlspecialchars($valueLabels[$index]),
-                                );
-                            }
-                            $html .= sprintf(
-                                '<p>%s%s%s</p>',
-                                $label,
-                                self::formatMetadataValue($metadataType, $item, $newTab),
-                                $unit,
+                if ($metadataType === 'multifield' && is_array($value)) {
+                    // a multifield is displayed as a table with one row per value
+                    $value = self::formatMultifieldValue($field['sub_fields'] ?? array(), $value, $newTab);
+                    $unit = '';
+                } elseif (is_array($value)) {
+                    $html = '';
+                    $valueLabels = $field['value_labels'] ?? array();
+                    foreach (array_values($value) as $index => $item) {
+                        $label = '';
+                        if (isset($valueLabels[$index]) && is_string($valueLabels[$index]) && $valueLabels[$index] !== '') {
+                            $label = sprintf(
+                                '<span class="badge badge-pill badge-light">%s</span><br>',
+                                Tools::eLabHtmlspecialchars($valueLabels[$index]),
                             );
                         }
-                        $value = $html;
-                        // the unit was rendered once for each value above
-                        $unit = '';
+                        $html .= sprintf(
+                            '<p>%s%s%s</p>',
+                            $label,
+                            self::formatMetadataValue($metadataType, $item, $newTab),
+                            $unit,
+                        );
                     }
+                    $value = $html;
+                    // the unit was rendered once for each value above
+                    $unit = '';
                 } else {
                     $value = self::formatMetadataValue($metadataType, $value, $newTab);
                 }
@@ -223,32 +221,40 @@ final class TwigFilters
             return '—';
         }
 
-        // Sort sub-fields by position
-        uksort($subFields, function($a, $b) use ($subFields) {
-            return ($subFields[$a]['position'] ?? 0) - ($subFields[$b]['position'] ?? 0);
-        });
+        // order the columns as defined by the position of each sub-field
+        uksort(
+            $subFields,
+            static fn(string $a, string $b): int => ($subFields[$a]['position'] ?? 0) <=> ($subFields[$b]['position'] ?? 0),
+        );
 
-        $html = '<table class="table table-sm table-borderless mb-0"><thead><tr><th style="width: 40px;"></th>';
-        
-        // Create headers
+        $html = '<table class="table table-sm table-borderless mb-0"><thead><tr>';
+        // header row with one column per sub-field
         foreach ($subFields as $name => $subField) {
-            $title = isset($subField['description']) ? ' title="' . Tools::eLabHtmlspecialchars($subField['description']) . '"' : '';
-            $html .= '<th' . $title . '>' . Tools::eLabHtmlspecialchars($name) . '</th>';
+            // show the description of the sub-field as tooltip on a question mark icon
+            // the icons have pointer-events: none (see main.scss), so the title attribute
+            // must be on a wrapping element for the tooltip to appear on hover
+            $description = '';
+            if (!empty($subField['description'])) {
+                $description = sprintf(
+                    '<span class="infotip-icon ml-1" title="%s"><i class="fas fa-circle-question" aria-hidden="true"></i></span>',
+                    Tools::eLabHtmlspecialchars((string) $subField['description']),
+                );
+            }
+            $html .= '<th>' . Tools::eLabHtmlspecialchars($name) . $description . '</th>';
         }
         $html .= '</tr></thead><tbody>';
-        
-        // Create rows
+
+        // one table row per value, with one cell per sub-field
         foreach ($values as $row) {
-            $html .= '<tr><td></td>';
+            $html .= '<tr>';
             foreach ($subFields as $name => $subField) {
                 $subFieldValue = $row[$name] ?? '';
                 $html .= '<td>' . self::formatMetadataValue($subField['type'] ?? 'text', $subFieldValue, $newTab) . '</td>';
             }
             $html .= '</tr>';
         }
-        
-        $html .= '</tbody></table>';
-        return $html;
+
+        return $html . '</tbody></table>';
     }
 
     private static function formatMetadataValue(string $metadataType, mixed $value, string $newTab): string
@@ -275,7 +281,7 @@ final class TwigFilters
                 Tools::eLabHtmlspecialchars($value),
             );
         }
-        if (in_array($metadataType, array(EntityType::Experiments->value, EntityType::Items->value), true)) {
+        if ($value !== '' && in_array($metadataType, array(EntityType::Experiments->value, EntityType::Items->value), true)) {
             $id = (int) $value;
             $page = $metadataType === EntityType::Items->value ? EntityType::Items->toPage() : EntityType::Experiments->toPage();
             return sprintf(

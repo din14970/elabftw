@@ -583,4 +583,126 @@ class MetadataHelpersTest extends \PHPUnit\Framework\TestCase
         $this->expectExceptionMessage('Metadata field Choice contains an invalid value.');
         MetadataHelpers::mergeMetadataValues($base, $incoming);
     }
+
+    public function testMergeMetadataNormalizesMultifieldValues(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"amount":{"type":"number","position":0},"day":{"type":"date","position":1},"note":{"type":"text","position":2}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"amount":"12,5","day":"18.12.2025"},{"note":"  keep spaces  "}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"amount":{"type":"number","position":0},"day":{"type":"date","position":1},"note":{"type":"text","position":2}},"value":[{"amount":"12.5","day":"2025-12-18"},{"note":"keep spaces"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataKeepsMultifieldRowsSparse(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0},"b":{"type":"text","position":1}},"value":[{"a":"x"}]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"b":"y"}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0},"b":{"type":"text","position":1}},"value":[{"b":"y"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataDropsMultifieldRowsWithoutValues(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"a":""},{"a":"kept"}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"a":{"type":"text","position":0}},"value":[{"a":"kept"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataAcceptsEmptyMultifieldValue(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[{"a":"old"}]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataRejectsScalarValueForMultifield(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":"nope"}}}';
+
+        $this->expectException(ImproperActionException::class);
+        $this->expectExceptionMessage('Metadata field MyMulti expects an array of objects.');
+        MetadataHelpers::mergeMetadata($source, $incoming);
+    }
+
+    public function testMergeMetadataRejectsNonArrayMultifieldRow(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":["nope"]}}}';
+
+        $this->expectException(ImproperActionException::class);
+        $this->expectExceptionMessage('Metadata field MyMulti row 0 is not an object.');
+        MetadataHelpers::mergeMetadata($source, $incoming);
+    }
+
+    public function testMergeMetadataRejectsInvalidMultifieldSubFieldValue(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"amount":{"type":"number","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"amount":"12X5"}]}}}';
+
+        $this->expectException(ImproperActionException::class);
+        $this->expectExceptionMessage('Metadata field MyMulti.amount expects a number.');
+        MetadataHelpers::mergeMetadata($source, $incoming);
+    }
+
+    public function testMergeMetadataRejectsInvalidMultifieldSubFieldOption(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"choice":{"type":"select","options":["A","B"],"position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"choice":"C"}]}}}';
+
+        $this->expectException(ImproperActionException::class);
+        $this->expectExceptionMessage('Metadata field MyMulti.choice contains an invalid option.');
+        MetadataHelpers::mergeMetadata($source, $incoming);
+    }
+
+    public function testMergeMetadataAcceptsMultifieldSelectWithoutOptions(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"choice":{"type":"select","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"choice":""}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"choice":{"type":"select","position":0}},"value":[]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataKeepsOnlyFirstMultifieldRowWithoutAllowMultiValues(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"a":"first"},{"a":"second"}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"a":{"type":"text","position":0}},"value":[{"a":"first"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataKeepsAllMultifieldRowsWithAllowMultiValues(): void
+    {
+        $source = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"a":{"type":"text","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"a":"first"},{"a":"second"}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","allow_multi_values":true,"sub_fields":{"a":{"type":"text","position":0}},"value":[{"a":"first"},{"a":"second"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadata($source, $incoming));
+    }
+
+    public function testMergeMetadataValuesNormalizesMultifield(): void
+    {
+        $base = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"amount":{"type":"number","position":0},"day":{"type":"date","position":1}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"amount":"12,5","day":"18.12.2025"}]}}}';
+        $expected = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"amount":{"type":"number","position":0},"day":{"type":"date","position":1}},"value":[{"amount":"12.5","day":"2025-12-18"}]}}}';
+
+        $this->assertJsonStringEqualsJsonString($expected, MetadataHelpers::mergeMetadataValues($base, $incoming));
+    }
+
+    public function testMergeMetadataValuesRejectsInvalidMultifieldSubFieldValue(): void
+    {
+        $base = '{"extra_fields":{"MyMulti":{"type":"multifield","sub_fields":{"amount":{"type":"number","position":0}},"value":[]}}}';
+        $incoming = '{"extra_fields":{"MyMulti":{"value":[{"amount":"12X5"}]}}}';
+
+        $this->expectException(ImproperActionException::class);
+        $this->expectExceptionMessage('Metadata field MyMulti.amount expects a number.');
+        MetadataHelpers::mergeMetadataValues($base, $incoming);
+    }
 }

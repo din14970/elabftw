@@ -608,6 +608,11 @@ button:disabled {
   }
 }
 
+/* a span inside a link must not override the link color (e.g. title spans added by replaceWithTitle) */
+.table a span {
+  color: inherit;
+}
+
 /* zebra only when the actual table does not have inline background-color */
 table:not([style*='background-color']) > tbody > tr:nth-child(even) {
   background-color: var(--white);
